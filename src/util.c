@@ -186,17 +186,24 @@ int stringmatchlen(const char *pattern, int patternLen,
     return 0;
 }
 
+/**
+ * 测试字符串是否与匹配模式相匹配，
+ * @see stringmatchlen()
+ * @param pattern 匹配模式
+ * @param string 待匹配字符串
+ * @param nocase 是否忽略大小写 1：忽略 0：不忽略
+ * @return1：匹配成功  0：匹配失败
+ */
 int stringmatch(const char *pattern, const char *string, int nocase) {
     return stringmatchlen(pattern,strlen(pattern),string,strlen(string),nocase);
 }
 
-/* Convert a string representing an amount of memory into the number of
- * bytes, so for instance memtoll("1Gb") will return 1073741824 that is
- * (1024*1024*1024).
- *
- * On parsing error, if *err is not NULL, it's set to 1, otherwise it's
- * set to 0. On error the function return value is 0, regardless of the
- * fact 'err' is NULL or not. */
+/**
+ * 将可读的空间大小转换为长整形字节数。 例如， "1Gb" 转换 为1073741824, 也就是 1024*1024*1024
+ * @param p 待转换的字符串
+ * @param err 错误代码， 1 成功 0 失败， 如果err为null， 则不赋值。
+ * @return 成功时返回字节数，失败时返回0.
+ * */
 long long memtoll(const char *p, int *err) {
     const char *u;
     char buf[128];
@@ -208,9 +215,9 @@ long long memtoll(const char *p, int *err) {
 
     /* Search the first non digit character. */
     u = p;
-    if (*u == '-') u++;
-    while(*u && isdigit(*u)) u++;
-    if (*u == '\0' || !strcasecmp(u,"b")) {
+    if (*u == '-') u++; // 去掉正负符号
+    while(*u && isdigit(*u)) u++; // 找到第一个非数值的字符
+    if (*u == '\0' || !strcasecmp(u,"b")) { // 判断字符获取基数。
         mul = 1;
     } else if (!strcasecmp(u,"k")) {
         mul = 1000;
@@ -224,13 +231,14 @@ long long memtoll(const char *p, int *err) {
         mul = 1000L*1000*1000;
     } else if (!strcasecmp(u,"gb")) {
         mul = 1024L*1024*1024;
-    } else {
+    } else {// 如果单位不正确， 设置错误标记。
         if (err) *err = 1;
         return 0;
     }
 
     /* Copy the digits into a buffer, we'll use strtoll() to convert
      * the digit (without the unit) into a number. */
+    /** 将数字字符串复制到buf中，如果数值长度超过buf， 则不进行处理， 返回错误。 */
     digits = u-p;
     if (digits >= sizeof(buf)) {
         if (err) *err = 1;
@@ -240,13 +248,16 @@ long long memtoll(const char *p, int *err) {
     buf[digits] = '\0';
 
     char *endptr;
-    errno = 0;
-    val = strtoll(buf,&endptr,10);
+    errno = 0; // 这是一个全局变量， 大部分标准库中的函数使用该变量来设置错误码， 使用前需要先初始化， 应为他很有可能存这上一个错误的错误码。
+    val = strtoll(buf,&endptr,10); // 调用标准库的函数将字符串转换为long long.
     if ((val == 0 && errno == EINVAL) || *endptr != '\0') {
         if (err) *err = 1;
         return 0;
     }
     return val*mul;
+
+    // EINVAL Invalid argument (POSIX.1). 参数错误
+    // errno 相关的资料查看 ： http://man7.org/linux/man-pages/man3/errno.3.html
 }
 
 /* Return the number of digits of 'v' when converted to string in radix 10.

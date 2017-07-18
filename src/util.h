@@ -48,7 +48,21 @@
  * @return 1：匹配成功  0：匹配失败
  */
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
+/**
+ * 测试字符串是否与匹配模式相匹配，
+ * @see stringmatchlen()
+ * @param pattern 匹配模式
+ * @param string 待匹配字符串
+ * @param nocase 是否忽略大小写 1：忽略 0：不忽略
+ * @return1：匹配成功  0：匹配失败
+ */
 int stringmatch(const char *p, const char *s, int nocase);
+/**
+ * 将可读的空间大小转换为长整形字节数。 例如， "1Gb" 转换 为1073741824, 也就是 1024*1024*1024
+ * @param p 待转换的字符串
+ * @param err 错误代码， 1 成功 0 失败， 如果err为null， 则不赋值。
+ * @return 成功时返回字节数，失败时返回0.
+ * */
 long long memtoll(const char *p, int *err);
 uint32_t digits10(uint64_t v);
 uint32_t sdigits10(int64_t v);

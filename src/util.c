@@ -262,6 +262,11 @@ long long memtoll(const char *p, int *err) {
 
 /* Return the number of digits of 'v' when converted to string in radix 10.
  * See ll2string() for more information. */
+/**
+ * 返回一个十进制数值的位数，例如10, 返回2, 100返回3
+ * @param v 数值
+ * @return 十进制数值的位数
+ */
 uint32_t digits10(uint64_t v) {
     if (v < 10) return 1;
     if (v < 100) return 2;
@@ -283,8 +288,15 @@ uint32_t digits10(uint64_t v) {
 }
 
 /* Like digits10() but for signed values. */
+/**
+ * 返回一个带符号的十进制数值的位数，例如10, 返回2, 100返回3
+ * @param v 数值
+ * @return 十进制数值的位数
+ */
 uint32_t sdigits10(int64_t v) {
     if (v < 0) {
+        // 使用溢出的方式获取LLONG_MIN的绝对值
+        // @see https://stackoverflow.com/questions/11243014/why-the-absolute-value-of-the-max-negative-integer-2147483648-is-still-2147483
         /* Abs value of LLONG_MIN requires special handling. */
         uint64_t uv = (v != LLONG_MIN) ?
                       (uint64_t)-v : ((uint64_t) LLONG_MAX)+1;
@@ -305,10 +317,17 @@ uint32_t sdigits10(int64_t v) {
  *
  * Modified in order to handle signed integers since the original code was
  * designed for unsigned integers. */
+/**
+ * 将数值准换成字符串。
+ *@param dst 保存字符串的空间
+ *@param dstlen 空间长度
+ *@param svalue 待转换成字符串的数值
+ *@return 成功返回目标字符串长度， 失败返回0
+ */
 int ll2string(char *dst, size_t dstlen, long long svalue) {
     static const char digits[201] =
-        "0001020304050607080910111213141516171819"
-        "2021222324252627282930313233343536373839"
+        "0001020304050607080910111213141516171819"      // 这个字符串很牛B， 举个例子来说. 我们有数值：45
+        "2021222324252627282930313233343536373839"      // 45 * 2 = 90 就找到字符“45”的起始位置。
         "4041424344454647484950515253545556575859"
         "6061626364656667686970717273747576777879"
         "8081828384858687888990919293949596979899";
@@ -317,6 +336,7 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
 
     /* The main loop works with 64bit unsigned integers for simplicity, so
      * we convert the number here and remember if it is negative. */
+    /** 将有符号数值转为无符号， 并且记录符号信息来备用。 */
     if (svalue < 0) {
         if (svalue != LLONG_MIN) {
             value = -svalue;
@@ -330,6 +350,7 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
     }
 
     /* Check length. */
+    /** 获取目标字符串长度， 如果超过保存值用的字符串大小， 则直接返回错误。 */
     uint32_t const length = digits10(value)+negative;
     if (length >= dstlen) return 0;
 
@@ -338,14 +359,15 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
     dst[next] = '\0';
     next--;
     while (value >= 100) {
-        int const i = (value % 100) * 2;
+        int const i = (value % 100) * 2; // 每次取最后两位来处理
         value /= 100;
-        dst[next] = digits[i + 1];
+        dst[next] = digits[i + 1];  // 根据映射表来获取相应的字符数值
         dst[next - 1] = digits[i];
         next -= 2;
     }
 
     /* Handle last 1-2 digits. */
+    // 处理最后两位， 小于10的直接赋值，大于10的按照上面的映射表来获取
     if (value < 10) {
         dst[next] = '0' + (uint32_t) value;
     } else {
@@ -355,6 +377,7 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
     }
 
     /* Add sign. */
+    /** 如果是负数，在前面加上负数符号。 */
     if (negative) dst[0] = '-';
     return length;
 }

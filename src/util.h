@@ -64,8 +64,25 @@ int stringmatch(const char *p, const char *s, int nocase);
  * @return 成功时返回字节数，失败时返回0.
  * */
 long long memtoll(const char *p, int *err);
+/**
+ * 返回一个十进制数值的位数，例如10, 返回2, 100返回3
+ * @param v 数值
+ * @return 十进制数值的位数
+ */
 uint32_t digits10(uint64_t v);
+/**
+ * 返回一个带符号的十进制数值的位数，例如10, 返回2, 100返回3
+ * @param v 数值
+ * @return 十进制数值的位数
+ */
 uint32_t sdigits10(int64_t v);
+/**
+ * 将数值准换成字符串。
+ *@param dst 保存字符串的空间
+ *@param dstlen 空间长度
+ *@param svalue 待转换成字符串的数值
+ *@return 成功返回目标字符串长度， 失败返回0
+ */
 int ll2string(char *s, size_t len, long long value);
 int string2ll(const char *s, size_t slen, long long *value);
 int string2l(const char *s, size_t slen, long *value);

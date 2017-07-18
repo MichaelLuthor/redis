@@ -33,6 +33,20 @@
 #include <stdint.h>
 #include "sds.h"
 
+/**
+ * 一个Glob风格的字符串匹配函数
+ * * 匹配0个或多个任意字符
+ * ? 匹配一个任意字符
+ * [ABC] 匹配中括号内的任意字符
+ * [^ABC] 匹配非中括号中的任意字符
+ * [A-Z] 匹配中括号中指定范围的字符
+ * @param pattern 匹配模式
+ * @param patternLen 匹配模式长度
+ * @param string 待匹配字符串
+ * @param stringLen 待匹配字符串长度
+ * @param nocase 是否忽略大小写 1：忽略 0：不忽略
+ * @return 1：匹配成功  0：匹配失败
+ */
 int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
 int stringmatch(const char *p, const char *s, int nocase);
 long long memtoll(const char *p, int *err);

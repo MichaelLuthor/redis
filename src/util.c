@@ -43,22 +43,42 @@
 #include "util.h"
 #include "sha1.h"
 
-/* Glob-style pattern matching. */
+/**
+ * 一个Glob风格的字符串匹配函数
+ * * 匹配0个或多个任意字符
+ * ? 匹配一个任意字符
+ * [ABC] 匹配中括号内的任意字符
+ * [^ABC] 匹配非中括号中的任意字符
+ * [A-Z] 匹配中括号中指定范围的字符
+ * @param pattern 匹配模式
+ * @param patternLen 匹配模式长度
+ * @param string 待匹配字符串
+ * @param stringLen 待匹配字符串长度
+ * @param nocase 是否忽略大小写 1：忽略 0：不忽略
+ * @return 1：匹配成功  0：匹配失败
+ */
 int stringmatchlen(const char *pattern, int patternLen,
         const char *string, int stringLen, int nocase)
 {
+    // 匹配采用的是逐字游走的方式进行匹配,
+    // 一旦游走的过程中存在不匹配的字符串则表示匹配失败。
+    // 如果游走到匹配模式的末尾， 则说明该字符串完全匹配。
+    // 例如： 匹配模式  ABCDEF?12345
+    //           ^ 当前位置， 向后游走
+    //     字符串       ABCDEFX12345
+    //           ^ 当前位置， 向后游走
     while(patternLen) {
         switch(pattern[0]) {
         case '*':
-            while (pattern[1] == '*') {
-                pattern++;
-                patternLen--;
+            while (pattern[1] == '*') { // 因为*是匹配一个或多个， 所以处理掉多余的*
+                pattern++;              // 后，继续匹配。
+                patternLen--;           // TODO : 如果匹配模式字符串为"**", 这段内存后面又存着"*", 这不就错了么? 应该检查下patternLen吧。
             }
-            if (patternLen == 1)
-                return 1; /* match */
-            while(stringLen) {
-                if (stringmatchlen(pattern+1, patternLen-1,
-                            string, stringLen, nocase))
+            if (patternLen == 1) // 除了第一个*， 后面的*都被清理掉了， 所以这时候匹配模式就成了 "*",
+                return 1;        // 这样后面的字符串就不用再匹配了。
+            while(stringLen) {                              // 由于*匹配的是一个或多个，所以没有办法确定这个多个到底是几个，
+                if (stringmatchlen(pattern+1, patternLen-1, // 所以， 从1开始一个个尝试， 直到后面的模式被匹配上。
+                            string, stringLen, nocase))     // 如果整个字符串都匹配完了都没有匹配到后面的模式， 则该字符串匹配失败。
                     return 1; /* match */
                 string++;
                 stringLen--;
@@ -66,40 +86,40 @@ int stringmatchlen(const char *pattern, int patternLen,
             return 0; /* no match */
             break;
         case '?':
-            if (stringLen == 0)
-                return 0; /* no match */
-            string++;
+            if (stringLen == 0) // 由于？表示匹配任意一个字符， 所以如果字符串已经匹配完了，那就匹配失败了。
+                return 0;
+            string++;     // 如果字符串还没有匹配玩，那继续游走一个字符
             stringLen--;
             break;
         case '[':
         {
             int not, match;
 
-            pattern++;
+            pattern++; // 走过符号 [
             patternLen--;
-            not = pattern[0] == '^';
+            not = pattern[0] == '^'; // 如果中括号内的第一个字符为^, 表示不匹配中括号中的字符。
             if (not) {
                 pattern++;
                 patternLen--;
             }
             match = 0;
             while(1) {
-                if (pattern[0] == '\\') {
+                if (pattern[0] == '\\') { // 匹配转义字符， 例如： \*,\?这种, 忽略过反斜线， 匹配反斜线后面的内容。
                     pattern++;
                     patternLen--;
-                    if (pattern[0] == string[0])
-                        match = 1;
-                } else if (pattern[0] == ']') {
+                    if (pattern[0] == string[0]) // 这里没有判断大小写敏感唉~~~， 如果我的模式是"123\ABC", 并且大小写不敏感， 这样的话就匹配不到"123abc"了。
+                        match = 1;               // TODO 待验证
+                } else if (pattern[0] == ']') {  // 中括号匹配结束
                     break;
-                } else if (patternLen == 0) {
-                    pattern--;
+                } else if (patternLen == 0) { // 如果中括号没有结束符，也就是找不到], 则回走到上一个字符，
+                    pattern--;                // 用来接下来统一的游走。
                     patternLen++;
                     break;
-                } else if (pattern[1] == '-' && patternLen >= 3) {
+                } else if (pattern[1] == '-' && patternLen >= 3) { // 匹配指定范围， - 前面和后面的字符指定开始和结束。
                     int start = pattern[0];
                     int end = pattern[2];
                     int c = string[0];
-                    if (start > end) {
+                    if (start > end) { // 如果范围从大到小， 则转为从小到大。
                         int t = start;
                         start = end;
                         end = t;
@@ -109,11 +129,11 @@ int stringmatchlen(const char *pattern, int patternLen,
                         end = tolower(end);
                         c = tolower(c);
                     }
-                    pattern += 2;
+                    pattern += 2; // 游走过范围指示符和后面的范围值
                     patternLen -= 2;
                     if (c >= start && c <= end)
                         match = 1;
-                } else {
+                } else {                              // 这里正常匹配每个中括号里面的可能， 如果发现就标记match。
                     if (!nocase) {
                         if (pattern[0] == string[0])
                             match = 1;
@@ -125,7 +145,7 @@ int stringmatchlen(const char *pattern, int patternLen,
                 pattern++;
                 patternLen--;
             }
-            if (not)
+            if (not) // 如果开始为^, 表示不匹配中括号中的任何内容，所以这里如果匹配到了， 那就失败了。
                 match = !match;
             if (!match)
                 return 0; /* no match */
@@ -133,13 +153,13 @@ int stringmatchlen(const char *pattern, int patternLen,
             stringLen--;
             break;
         }
-        case '\\':
+        case '\\': // 匹配转义字符， 直接游走过转移标记， 后面作为正常符号处理就行了。 注意这里没有break， 字符匹配交给了default
             if (patternLen >= 2) {
                 pattern++;
                 patternLen--;
             }
-            /* fall through */
-        default:
+            /* fall through */ // <= 这种模式为："abc123\\"
+        default: // 正常比较字符， 注意大小写是否敏感。
             if (!nocase) {
                 if (pattern[0] != string[0])
                     return 0; /* no match */
@@ -151,17 +171,17 @@ int stringmatchlen(const char *pattern, int patternLen,
             stringLen--;
             break;
         }
-        pattern++;
+        pattern++; // 游走到下一个字符。
         patternLen--;
-        if (stringLen == 0) {
-            while(*pattern == '*') {
+        if (stringLen == 0) {        // 如果字符串都匹配完了， 但是模式没有完， 那么将剩下的模式尝试匹配掉*.
+            while(*pattern == '*') { // 如果*消耗完后，匹配模式还有剩余，那就表示匹配失败。
                 pattern++;
                 patternLen--;
             }
             break;
         }
     }
-    if (patternLen == 0 && stringLen == 0)
+    if (patternLen == 0 && stringLen == 0) // 如果匹配模式和字符串都消耗完了， 则说明完全匹配， 否则匹配失败。
         return 1;
     return 0;
 }

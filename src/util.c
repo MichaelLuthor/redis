@@ -394,31 +394,43 @@ int ll2string(char *dst, size_t dstlen, long long svalue) {
  * Because of its strictness, it is safe to use this function to check if
  * you can convert a string into a long long, and obtain back the string
  * from the number without any loss in the string representation. */
+/**
+ * 将字符串转换为long long型数值。 转换时采取严格模式，字符串开始或者末尾不能包含空格或者其他不用来表示数值的字符。
+ * 如果字符串数值一开始就是0，并且不是0，则解析失败。 例如:"0123"， 将解析失败。
+ * @param s 待转换字符串
+ * @param slen 字符串长度
+ * @param value 用于存储准桓侯的数值
+ * @return 成功时返回1， 否则返回0
+ */
 int string2ll(const char *s, size_t slen, long long *value) {
-    const char *p = s;
-    size_t plen = 0;
-    int negative = 0;
+    const char *p = s; // 处理字符串的游走指针
+    size_t plen = 0; // 已处理字符串长度
+    int negative = 0; // 正负符号，0：正数，1：负数
     unsigned long long v;
 
+    // 如果字符串为空， 则解析失败
     if (plen == slen)
         return 0;
 
     /* Special case: first and only digit is 0. */
+    /* 如果只有一个字符，并且是0， 则转换后数值为0， 并且不再继续处理。 */
     if (slen == 1 && p[0] == '0') {
         if (value != NULL) *value = 0;
         return 1;
     }
 
-    if (p[0] == '-') {
+    if (p[0] == '-') { // 检查正负号
         negative = 1;
         p++; plen++;
 
         /* Abort on only a negative sign. */
+        /* 如果字符串仅仅包含一个负号， 解析失败。 */
         if (plen == slen)
             return 0;
     }
 
     /* First digit should be 1-9, otherwise the string should just be 0. */
+    /* 第一个数值应该在1-9之间， 如果为0，并且字符串数值不是0， 那么解析失败。 */
     if (p[0] >= '1' && p[0] <= '9') {
         v = p[0]-'0';
         p++; plen++;
@@ -429,12 +441,13 @@ int string2ll(const char *s, size_t slen, long long *value) {
         return 0;
     }
 
+    /* 游走剩余的字符， 每次将已解析的数值*10， 然后把当前字符作为个位数加上去。 */
     while (plen < slen && p[0] >= '0' && p[0] <= '9') {
-        if (v > (ULLONG_MAX / 10)) /* Overflow. */
+        if (v > (ULLONG_MAX / 10)) /* Overflow. */ // 检查是否进位溢出
             return 0;
         v *= 10;
 
-        if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow. */
+        if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow. */ // 检查是否加上个位数后溢出。
             return 0;
         v += p[0]-'0';
 
@@ -442,9 +455,11 @@ int string2ll(const char *s, size_t slen, long long *value) {
     }
 
     /* Return if not all bytes were used. */
+    /* 检查是否所有的字符都处理完成， 例如 "123abc"，这样，将会只处理123， abc将会剩余。 */
     if (plen < slen)
         return 0;
 
+    /* 将正负号添加到数值上。 */
     if (negative) {
         if (v > ((unsigned long long)(-(LLONG_MIN+1))+1)) /* Overflow. */
             return 0;
@@ -460,15 +475,25 @@ int string2ll(const char *s, size_t slen, long long *value) {
 /* Convert a string into a long. Returns 1 if the string could be parsed into a
  * (non-overflowing) long, 0 otherwise. The value will be set to the parsed
  * value when appropriate. */
+/**
+ * 转换字符串为long型数值
+ * @param s 待转换字符串
+ * @param slen 字符串长度
+ * @param lval 用于存储准桓侯的数值
+ * @return 成功时返回1， 否则返回0
+ */
 int string2l(const char *s, size_t slen, long *lval) {
     long long llval;
 
+    // 将数值转为long long. 如果失败则返回0
     if (!string2ll(s,slen,&llval))
         return 0;
 
+    // 如果转换后的数值超过了long的表示范围， 则失败返回0
     if (llval < LONG_MIN || llval > LONG_MAX)
         return 0;
 
+    // 将转换成功的数值强制转换成long。
     *lval = (long)llval;
     return 1;
 }
@@ -480,6 +505,13 @@ int string2l(const char *s, size_t slen, long *lval) {
  * Note that this function demands that the string strictly represents
  * a double: no spaces or other characters before or after the string
  * representing the number are accepted. */
+/**
+ * 将字符串转换为long double数值。
+ * @param s 待转换字符串
+ * @param slen 待转换字符串长度
+ * @param dp 存储转换后的数值。
+ * @return 成功时返回1， 失败返回0
+ */
 int string2ld(const char *s, size_t slen, long double *dp) {
     char buf[256];
     long double value;
@@ -489,6 +521,7 @@ int string2ld(const char *s, size_t slen, long double *dp) {
     memcpy(buf,s,slen);
     buf[slen] = '\0';
 
+    // 调用标准库的函数进行准转换
     errno = 0;
     value = strtold(buf, &eptr);
     if (isspace(buf[0]) || eptr[0] != '\0' ||
@@ -500,6 +533,8 @@ int string2ld(const char *s, size_t slen, long double *dp) {
 
     if (dp) *dp = value;
     return 1;
+
+    // ERANGE Result too large (POSIX.1, C99).
 }
 
 /* Convert a double to a string representation. Returns the number of bytes
@@ -507,7 +542,15 @@ int string2ld(const char *s, size_t slen, long double *dp) {
  * This function does not support human-friendly formatting like ld2string
  * does. It is intented mainly to be used inside t_zset.c when writing scores
  * into a ziplist representing a sorted set. */
+/**
+ * 将double类型转换为字符串
+ * @param buf 用于存放转换后的字符串
+ * @param len buf的大小
+ * @param value 待转换的数值
+ * @return 返回转换后的字符串的长度
+ */
 int d2string(char *buf, size_t len, double value) {
+    // 主要是通过标准库函数sprintf来进行转换。
     if (isnan(value)) {
         len = snprintf(buf,len,"nan");
     } else if (isinf(value)) {
@@ -541,6 +584,7 @@ int d2string(char *buf, size_t len, double value) {
             len = snprintf(buf,len,"%.17g",value);
     }
 
+    // DBL_MANT_DIG double类型的尾数位数
     return len;
 }
 
@@ -551,6 +595,14 @@ int d2string(char *buf, size_t len, double value) {
  *
  * The function returns the length of the string or zero if there was not
  * enough buffer room to store it. */
+/**
+ * long double 转换为 字符串
+ * @param buf 用于存放转换后的字符串
+ * @param len buf的大小
+ * @param value 待转换的数值
+ * @param humanfriendly 是否为科学计数法
+ * @return 返回转换后的字符串的长度， 失败返回0
+ */
 int ld2string(char *buf, size_t len, long double value, int humanfriendly) {
     size_t l;
 
@@ -594,6 +646,15 @@ int ld2string(char *buf, size_t len, long double value, int humanfriendly) {
  * given execution of Redis, so that if you are talking with an instance
  * having run_id == A, and you reconnect and it has run_id == B, you can be
  * sure that it is either a different instance or it was restarted. */
+/**
+ * 为运行的Redis生成一个长度同SHA1的“Run ID”，这样当你链接一个实例的时候，这个实例的ID为A， 那么当你重新连接
+ * 这个实例的时候，他的run_id 变成了B， 这样你就能确定你连到了另外一个实例， 或者这个实例被重启。
+ */
+/**
+ * 生成一个随机的二进制字符串。
+ * @param p 用于存储生成的随机二进制字符串
+ * @param len 参数p的空间长度.
+ */
 void getRandomHexChars(char *p, unsigned int len) {
     char *charset = "0123456789abcdef";
     unsigned int j;
@@ -603,6 +664,7 @@ void getRandomHexChars(char *p, unsigned int len) {
     static unsigned char seed[20]; /* The SHA1 seed, from /dev/urandom. */
     static uint64_t counter = 0; /* The counter we hash with the seed. */
 
+     // 默认情况下使用/dev/urandom来获取seed。
     if (!seed_initialized) {
         /* Initialize a seed and use SHA1 in counter mode, where we hash
          * the same seed with a progressive counter. For the goals of this
@@ -614,13 +676,25 @@ void getRandomHexChars(char *p, unsigned int len) {
         if (fp) fclose(fp);
     }
 
+
     if (seed_initialized) {
+        // 如果seed有效， 则使用sha1来生成随机串。
+        // @see http://blog.csdn.net/knowledgeaaa/article/details/32703317
         while(len) {
             unsigned char digest[20];
             SHA1_CTX ctx;
             unsigned int copylen = len > 20 ? 20 : len;
 
+            /**
+             * SHA1_Init() 是一个初始化参数，它用来初始化一个 SHA_CTX 结构，该结构存放弄了生成 SHA1
+             * 散列值的一些参数，在应用中可以不用关系该结构的内容。
+             */
             SHA1Init(&ctx);
+            /**
+             * SHA1_Update() 函数正是可以处理大文件的关键。它可以反复调用，比如说我们要计算一个 5G 文件的散列值，
+             * 我们可以将该文件分割成多个小的数据块，对每个数据块分别调用一次该函数，这样在最后就能够应用 SHA1_Final()
+             * 函数正确计算出这个大文件的 sha1 散列值。
+             */
             SHA1Update(&ctx, seed, sizeof(seed));
             SHA1Update(&ctx, (unsigned char*)&counter,sizeof(counter));
             SHA1Final(digest, &ctx);
@@ -633,6 +707,7 @@ void getRandomHexChars(char *p, unsigned int len) {
             p += copylen;
         }
     } else {
+        // 如果/dev/urandom无法使用， 那么将使用当前时间和pid来生成随机ID。
         /* If we can't read from /dev/urandom, do some reasonable effort
          * in order to create some entropy, since this function is used to
          * generate run_id and cluster instance IDs */
@@ -674,6 +749,11 @@ void getRandomHexChars(char *p, unsigned int len) {
  * The function does not try to normalize everything, but only the obvious
  * case of one or more "../" appearning at the start of "filename"
  * relative path. */
+/**
+ * 将指定的文件名转换为绝对路径，如果已经是绝对路径了，则直接返回，否则将当前目录作为基目录来计算绝对路径。
+ * @param filename 待转换的路径
+ * @return 成功时返回SDS结构字符串，失败时返回NULL
+ */
 sds getAbsolutePath(char *filename) {
     char cwd[1024];
     sds abspath;
@@ -697,6 +777,15 @@ sds getAbsolutePath(char *filename) {
      *
      * For every "../" we find in the filename, we remove it and also remove
      * the last element of the cwd, unless the current cwd is "/". */
+    /**
+     * 我们假设转换路径为"../../path"， 当前路径为"/home/m/test/"
+     * 这样我们循环去掉转换路径中的"../", 同时去掉当前路径后面的一个目录。
+     * 例如：
+     *  /home/m/test/     ../../path
+     *  /home/m/             ../path
+     *  /home/                  path
+     * 然后将路径进行拼接就得到了绝对路径:/home/path
+     */
     while (sdslen(relpath) >= 3 &&
            relpath[0] == '.' && relpath[1] == '.' && relpath[2] == '/')
     {
@@ -714,6 +803,7 @@ sds getAbsolutePath(char *filename) {
     }
 
     /* Finally glue the two parts together. */
+    /* 拼接处理后的路径，得到绝对路径 */
     abspath = sdscatsds(abspath,relpath);
     sdsfree(relpath);
     return abspath;
@@ -723,6 +813,11 @@ sds getAbsolutePath(char *filename) {
  * relative or absolute path. This function just checks that no / or \
  * character exists inside the specified path, that's enough in the
  * environments where Redis runs. */
+/**
+ * 检查指定路径是不是一个文件名，并且不包含任何路径信息。 该函数仅仅检查路径中是否包含路常用的径分隔符.
+ * @param path
+ * @return 1是 0否
+ */
 int pathIsBaseName(char *path) {
     return strchr(path,'/') == NULL && strchr(path,'\\') == NULL;
 }

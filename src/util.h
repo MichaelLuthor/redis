@@ -84,15 +84,65 @@ uint32_t sdigits10(int64_t v);
  *@return 成功返回目标字符串长度， 失败返回0
  */
 int ll2string(char *s, size_t len, long long value);
+/**
+ * 将字符串转换为long long型数值。 转换时采取严格模式，字符串开始或者末尾不能包含空格或者其他不用来表示数值的字符。
+ * 如果字符串数值一开始就是0，并且不是0，则解析失败。 例如:"0123"， 将解析失败。
+ * @param s 待转换字符串
+ * @param slen 字符串长度
+ * @param value 用于存储准桓侯的数值
+ * @return 成功时返回1， 否则返回0
+ */
 int string2ll(const char *s, size_t slen, long long *value);
+/**
+ * 转换字符串为long型数值
+ * @param s 待转换字符串
+ * @param slen 字符串长度
+ * @param lval 用于存储准桓侯的数值
+ * @return 成功时返回1， 否则返回0
+ */
 int string2l(const char *s, size_t slen, long *value);
+/**
+ * 将字符串转换为long double数值。
+ * @param s 待转换字符串
+ * @param slen 待转换字符串长度
+ * @param dp 存储转换后的数值。
+ * @return 成功时返回1， 失败返回0
+ */
 int string2ld(const char *s, size_t slen, long double *dp);
+/**
+ * 将double类型转换为字符串
+ * @param buf 用于存放转换后的字符串
+ * @param len buf的大小
+ * @param value 待转换的数值
+ * @return 返回转换后的字符串的长度
+ */
 int d2string(char *buf, size_t len, double value);
+/**
+ * long double 转换为 字符串
+ * @param buf 用于存放转换后的字符串
+ * @param len buf的大小
+ * @param value 待转换的数值
+ * @param humanfriendly 是否为科学计数法
+ * @return 返回转换后的字符串的长度， 失败返回0
+ */
 int ld2string(char *buf, size_t len, long double value, int humanfriendly);
+/**
+ * 将指定的文件名转换为绝对路径，如果已经是绝对路径了，则直接返回，否则将当前目录作为基目录来计算绝对路径。
+ * @param filename 待转换的路径
+ * @return 成功时返回SDS结构字符串，失败时返回NULL
+ */
 sds getAbsolutePath(char *filename);
+/**
+ * 检查指定路径是不是一个文件名，并且不包含任何路径信息。 该函数仅仅检查路径中是否包含路常用的径分隔符.
+ * @param path
+ * @return 1是 0否
+ */
 int pathIsBaseName(char *path);
 
 #ifdef REDIS_TEST
+/**
+ * Util 的单元测试函数
+ * */
 int utilTest(int argc, char **argv);
 #endif
 

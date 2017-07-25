@@ -74,9 +74,24 @@
 #if defined(USE_JEMALLOC) && defined(JEMALLOC_FRAG_HINT)
 #define HAVE_DEFRAG
 #endif
-
+/**
+ * 申请指定大小的内存空间
+ * @param size 空间大小
+ * @return 返回申请空间的收地址
+ */
 void *zmalloc(size_t size);
+/**
+ * 申请一段内存空间， 并初始化空间值。
+ * @param size 申请空间大小
+ * @return 申请空间的首地址
+ */
 void *zcalloc(size_t size);
+/**
+ * 将申请的空间大小改为新的大小
+ * @param ptr 原始空间指针
+ * @param size 新空间大小
+ * @return 空间大小变更后的空间指针
+ */
 void *zrealloc(void *ptr, size_t size);
 /**
  * 释放掉申请的内存空间。
@@ -146,7 +161,16 @@ void zfree_no_tcache(void *ptr);
 void *zmalloc_no_tcache(size_t size);
 #endif
 
+/**
+ * 如果使用的是libc的malloc，则需要自定义实现malloc_size
+ */
 #ifndef HAVE_MALLOC_SIZE
+/**
+ * 如果没有HAVE_MALLOC_SIZE， 那么我们需要手动实现一个zmalloc_size。
+ * 这样， 由于我们在每次申请的内存空间的头部加入了该空间的大小， 所以我们直接取这个值。
+ * @param ptr 空间指针
+ * @return 返回该指针所指向的空间的大小
+ */
 size_t zmalloc_size(void *ptr);
 #endif
 

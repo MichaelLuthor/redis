@@ -50,6 +50,8 @@ void zlibc_free(void *ptr) {
 #include "zmalloc.h"
 #include "atomicvar.h"
 
+// PREFIX_SIZE 是指在使用原始的malloc的时候，申请的每一块内存都预留一部分空间用来存储
+// 其他信息， 这里PREFIX_SIZE大小的预留空间主要是用来存储申请的内存大小。
 // HAVE_MALLOC_SIZE 用来确定系统是否有函数malloc_size
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
@@ -65,11 +67,13 @@ void zlibc_free(void *ptr) {
 /* Explicitly override malloc/free etc when using tcmalloc. */
 /** 根据使用不同的内存管理工具映射内存管理函数 */
 #if defined(USE_TCMALLOC)
+// 将malloc函数映射到tc_malloc
 #define malloc(size) tc_malloc(size)
 #define calloc(count,size) tc_calloc(count,size)
 #define realloc(ptr,size) tc_realloc(ptr,size)
 #define free(ptr) tc_free(ptr)
 #elif defined(USE_JEMALLOC)
+// 将malloc函数映射到jemalloc
 #define malloc(size) je_malloc(size)
 #define calloc(count,size) je_calloc(count,size)
 #define realloc(ptr,size) je_realloc(ptr,size)
@@ -78,21 +82,52 @@ void zlibc_free(void *ptr) {
 #define dallocx(ptr,flags) je_dallocx(ptr,flags)
 #endif
 
+/**
+ * 原子增加内存使用统计量
+ * @see https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html
+ * Built-in Functions for Memory Model Aware Atomic Operations
+ * Built-in Function: type __atomic_add_fetch (type *ptr, type val, int memorder)
+ * Built-in Function: type __atomic_sub_fetch (type *ptr, type val, int memorder)
+ * Built-in Function: type __atomic_and_fetch (type *ptr, type val, int memorder)
+ * Built-in Function: type __atomic_xor_fetch (type *ptr, type val, int memorder)
+ * Built-in Function: type __atomic_or_fetch (type *ptr, type val, int memorder)
+ * Built-in Function: type __atomic_nand_fetch (type *ptr, type val, int memorder)
+ *
+ * These built-in functions perform the operation suggested by the name, and return
+ * the result of the operation. Operations on pointer arguments are performed as if
+ * the operands were of the uintptr_t type. That is, they are not scaled by the size
+ * of the type to which the pointer points.
+ * { *ptr op= val; return *ptr; }
+ */
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     atomicIncr(used_memory,__n); \
 } while(0)
-
+/**
+ * 原子减少内存使用统计量
+ */
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     atomicDecr(used_memory,__n); \
 } while(0)
 
+// 已申请内存空间总大小
 static size_t used_memory = 0;
+// 之前这个变量是用来作为线程锁的，
+// 现在搜不到哪里使用了，应该是被__atomic_fetch_XXX这些给代替了吧。
+// 之前是这样：
+// pthread_mutex_lock(&used_memory_mutex);  \
+// used_memory += _n; \
+// pthread_mutex_unlock(&used_memory_mutex);
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/**
+ * 默认的内存溢出处理函数
+ * 显示内存溢出信息后， 直接退出程序。
+ * @param size 溢出的空间大小
+ */
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
@@ -100,18 +135,30 @@ static void zmalloc_default_oom(size_t size) {
     abort();
 }
 
+/** 内存溢出处理函数， 这里是默认的处理方法。 */
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
+/**
+ * 申请指定大小的内存空间
+ * @param size 空间大小
+ * @return 返回申请空间的收地址
+ */
 void *zmalloc(size_t size) {
+    // 申请指定大小空间
     void *ptr = malloc(size+PREFIX_SIZE);
-
+    // 如果申请失败， 进行内存溢出处理
     if (!ptr) zmalloc_oom_handler(size);
 #ifdef HAVE_MALLOC_SIZE
+    // 如果你能够直接获取到申请的内存大小， 则使用提供的函数更新内存统计量
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
 #else
+    // 否则手动封信内存使用量。
+    // 在空间头部加入空间头部信息， 这里为空间大小
     *((size_t*)ptr) = size;
+    // 更新内存使用量
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
+    // 返回去掉头部信息后，能够用来存储数据的空间的起始地址
     return (char*)ptr+PREFIX_SIZE;
 #endif
 }
@@ -119,60 +166,122 @@ void *zmalloc(size_t size) {
 /* Allocation and free functions that bypass the thread cache
  * and go straight to the allocator arena bins.
  * Currently implemented only for jemalloc. Used for online defragmentation. */
+// 绕过malloc和free的线程缓存， 直接操作arena bins。
+/**
+ * @see http://www.cnblogs.com/alisecurity/p/5486458.html
+ * 这就说明它是通过brk系统调用实现的。并且，还可以看出虽然我们只申请了1000字节的数据，但是系统却分配了132KB大小的堆，
+ * 这是为什么呢？原来这132KB的堆空间叫做arena，此时因为是主线程分配的，所以叫做main arena(每个arena中含有多个chunk，
+ * 这些chunk以链表的形式加以组织)。由于132KB比1000字节大很多，所以主线程后续再声请堆空间的话，就会先从这132KB的剩余部分中申请，
+ * 直到用完或不够用的时候，再通过增加program break location的方式来增加main arena的大小。同理，当main
+ * arena中有过多空闲内存的时候，也会通过减小program break location的方式来缩小main arena的大小。
+ *
+ * 在主线程调用free之后：从内存布局可以看出程序的堆空间并没有被释放掉，原来调用free函数释放已经分配了的空间并非直接“返还”给系统，
+ * 而是由glibc 的malloc库函数加以管理。它会将释放的chunk添加到main arenas的bin(这是一种用于存储同类型free chunk
+ * 的双链表数据结构，后问会加以详细介绍)中。在这里，记录空闲空间的freelist数据结构称之为bins。之后当用户再次调用malloc申请堆
+ * 空间的时候，glibc malloc会先尝试从bins中找到一个满足要求的chunk，如果没有才会向操作系统申请新的堆空间。
+ */
 #ifdef HAVE_DEFRAG
+/**
+ * 从arena bins申请指定大小的内存空间
+ * @param size
+ * @return 返回申请空间的数据地址
+ */
 void *zmalloc_no_tcache(size_t size) {
+    // 调用mallocx来从arena bins申请空间。
     void *ptr = mallocx(size+PREFIX_SIZE, MALLOCX_TCACHE_NONE);
+    // 如果申请失败， 则进行内存溢出处理
     if (!ptr) zmalloc_oom_handler(size);
+    // 更新内存使用统计量
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
+    // 返回空间地址
     return ptr;
 }
-
+/**
+ * 从arena bins释放指定的内存空间
+ * @param ptr 空间指针首地址
+ */
 void zfree_no_tcache(void *ptr) {
+    // 如果为null， 怒进行处理
     if (ptr == NULL) return;
+    // 更新内存使用统计量
     update_zmalloc_stat_free(zmalloc_size(ptr));
+    // 调用dallocx来从arena bins释放空间。
     dallocx(ptr, MALLOCX_TCACHE_NONE);
 }
 #endif
 
+/**
+ * 申请一段内存空间， 并初始化空间值。
+ * @param size 申请空间大小
+ * @return 申请空间的首地址
+ */
 void *zcalloc(size_t size) {
+    // 调用calloc函数申请内存
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
+    // 如果失败， 进行内存溢出处理
     if (!ptr) zmalloc_oom_handler(size);
 #ifdef HAVE_MALLOC_SIZE
+    // 更新内存使用率
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
+    // 返回空间地址
     return ptr;
 #else
+    // 将空间大小写到空间头部
     *((size_t*)ptr) = size;
+    //更新内存使用空间大小
     update_zmalloc_stat_alloc(size+PREFIX_SIZE);
+    // 将内存数据区域返回
     return (char*)ptr+PREFIX_SIZE;
 #endif
 }
 
+/**
+ * 将申请的空间大小改为新的大小
+ * @param ptr 原始空间指针
+ * @param size 新空间大小
+ * @return 空间大小变更后的空间指针
+ */
 void *zrealloc(void *ptr, size_t size) {
 #ifndef HAVE_MALLOC_SIZE
-    void *realptr;
+    void *realptr; // 真实空间地址
 #endif
     size_t oldsize;
     void *newptr;
 
+    // 如果prt为null， 那么直接申请空间就好。
     if (ptr == NULL) return zmalloc(size);
 #ifdef HAVE_MALLOC_SIZE
+    // 获取老的空间大小用于内存统计用。
     oldsize = zmalloc_size(ptr);
+    // 调用relloc重新申请内存。
     newptr = realloc(ptr,size);
+    // 如果申请失败， 则内存溢出处理
     if (!newptr) zmalloc_oom_handler(size);
 
+    // 从内存统计中去掉老的内存信息
     update_zmalloc_stat_free(oldsize);
+    // 从内存统计中加上新的内存信息
     update_zmalloc_stat_alloc(zmalloc_size(newptr));
     return newptr;
 #else
+
+    // 真是地址由指定定时前去前缀信息获得。
     realptr = (char*)ptr-PREFIX_SIZE;
+    // 从头信息中获取老的空间大小
     oldsize = *((size_t*)realptr);
+    // 重新申请新的空间
     newptr = realloc(realptr,size+PREFIX_SIZE);
+    // 如果申请失败， 则内存溢出处理
     if (!newptr) zmalloc_oom_handler(size);
 
+    // 在新空间按的头部加上新的空间大小
     *((size_t*)newptr) = size;
+    // 从内存统计中去掉老的内存信息
     update_zmalloc_stat_free(oldsize);
+    // 从内存统计中加上新的内存信息
     update_zmalloc_stat_alloc(size);
+    // 返回空间的数据区域
     return (char*)newptr+PREFIX_SIZE;
 #endif
 }

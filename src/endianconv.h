@@ -36,11 +36,38 @@
 #include "config.h"
 #include <stdint.h>
 
+/**
+ * 将指针p所指向的16为无符号整形转换为大端模式。
+ * @param P 带转换的数值地址
+ */
 void memrev16(void *p);
+/**
+ * 将指针p所指向的32为无符号整形转换为大端模式。
+ * @param P 带转换的数值地址
+ */
 void memrev32(void *p);
+/**
+ * 将指针p所指向的64为无符号整形转换为大端模式。
+ * @param P 带转换的数值地址
+ */
 void memrev64(void *p);
+/**
+ * 将16位无符号整形转化为大端模式
+ * @param v 待转换的数值
+ * @return 转换为大端模式后的数值
+ */
 uint16_t intrev16(uint16_t v);
+/**
+ * 将32位无符号整形转化为大端模式
+ * @param v 待转换的数值
+ * @return 转换为大端模式后的数值
+ */
 uint32_t intrev32(uint32_t v);
+/**
+ * 将64位无符号整形转化为大端模式
+ * @param v 待转换的数值
+ * @return 转换为大端模式后的数值
+ */
 uint64_t intrev64(uint64_t v);
 
 /* variants of the function doing the actual convertion only if the target

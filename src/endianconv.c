@@ -42,10 +42,18 @@
  */
 
 
+/**
+ * 在网络上传输数据时，由于数据传输的两端可能对应不同的硬件平台，采用的存储字节顺序也可能不一致，
+ * 因此 TCP/IP 协议规定了在网络上必须采用网络字节顺序(也就是大端模式) 。
+ */
 #include <stdint.h>
 
 /* Toggle the 16 bit unsigned integer pointed by *p from little endian to
  * big endian */
+/**
+ * 将指针p所指向的16为无符号整形转换为大端模式。
+ * @param P 带转换的数值地址
+ */
 void memrev16(void *p) {
     unsigned char *x = p, t;
 
@@ -56,6 +64,10 @@ void memrev16(void *p) {
 
 /* Toggle the 32 bit unsigned integer pointed by *p from little endian to
  * big endian */
+/**
+ * 将指针p所指向的32为无符号整形转换为大端模式。
+ * @param P 带转换的数值地址
+ */
 void memrev32(void *p) {
     unsigned char *x = p, t;
 
@@ -69,6 +81,10 @@ void memrev32(void *p) {
 
 /* Toggle the 64 bit unsigned integer pointed by *p from little endian to
  * big endian */
+/**
+ * 将指针p所指向的64为无符号整形转换为大端模式。
+ * @param P 带转换的数值地址
+ */
 void memrev64(void *p) {
     unsigned char *x = p, t;
 
@@ -86,16 +102,31 @@ void memrev64(void *p) {
     x[4] = t;
 }
 
+/**
+ * 将16位无符号整形转化为大端模式
+ * @param v 待转换的数值
+ * @return 转换为大端模式后的数值
+ */
 uint16_t intrev16(uint16_t v) {
     memrev16(&v);
     return v;
 }
 
+/**
+ * 将32位无符号整形转化为大端模式
+ * @param v 待转换的数值
+ * @return 转换为大端模式后的数值
+ */
 uint32_t intrev32(uint32_t v) {
     memrev32(&v);
     return v;
 }
 
+/**
+ * 将64位无符号整形转化为大端模式
+ * @param v 待转换的数值
+ * @return 转换为大端模式后的数值
+ */
 uint64_t intrev64(uint64_t v) {
     memrev64(&v);
     return v;
